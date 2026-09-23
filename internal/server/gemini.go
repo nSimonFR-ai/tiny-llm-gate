@@ -127,7 +127,7 @@ func (s *Server) sendGeminiChatRequest(
 	if err != nil {
 		return nil, true, fmt.Errorf("upstream transport: %w", err)
 	}
-	if resp.StatusCode >= 500 && canRetry {
+	if shouldFallbackStatus(hop, resp.StatusCode, canRetry) {
 		drain(resp.Body)
 		resp.Body.Close()
 		return nil, true, fmt.Errorf("upstream status %d", resp.StatusCode)

@@ -211,6 +211,56 @@ func TestFallbackOn5xx(t *testing.T) {
 	}
 }
 
+func TestFallbackOnConfigured429(t *testing.T) {
+	primary := newMockUpstream(429, `{"error":"plan exhausted"}`)
+	defer primary.Close()
+	secondary := newMockUpstream(200, `{"id":"x","choices":[{"message":{"content":"overflow"}}]}`)
+	defer secondary.Close()
+
+	s := buildServer(t,
+		map[string]config.Provider{
+			"plan":   {Type: "openai", BaseURL: primary.URL + "/v1"},
+			"market": {Type: "openai", BaseURL: secondary.URL + "/v1"},
+		},
+		map[string]config.Model{
+			"with-overflow": {Provider: "plan", UpstreamModel: "primary", Fallback: []string{"paid"}, FallbackOnStatus: []int{429}},
+			"paid":          {Provider: "market", UpstreamModel: "paid"},
+		}, nil,
+	)
+
+	rec := postJSON(t, s.Handler(), "/v1/chat/completions", map[string]any{
+		"model": "with-overflow", "messages": []map[string]any{{"role": "user", "content": "hi"}},
+	})
+	if rec.Code != 200 || secondary.mu.requests.Load() != 1 {
+		t.Fatalf("expected paid overflow after 429, status=%d body=%s secondary=%d", rec.Code, rec.Body.String(), secondary.mu.requests.Load())
+	}
+}
+
+func TestExplicitFallbackStatusDoesNotAlsoFallbackOn5xx(t *testing.T) {
+	primary := newMockUpstream(500, `{"error":"outage"}`)
+	defer primary.Close()
+	secondary := newMockUpstream(200, `{"id":"x","choices":[{"message":{"content":"charged"}}]}`)
+	defer secondary.Close()
+
+	s := buildServer(t,
+		map[string]config.Provider{
+			"plan":   {Type: "openai", BaseURL: primary.URL + "/v1"},
+			"market": {Type: "openai", BaseURL: secondary.URL + "/v1"},
+		},
+		map[string]config.Model{
+			"with-overflow": {Provider: "plan", UpstreamModel: "primary", Fallback: []string{"paid"}, FallbackOnStatus: []int{429}},
+			"paid":          {Provider: "market", UpstreamModel: "paid"},
+		}, nil,
+	)
+
+	rec := postJSON(t, s.Handler(), "/v1/chat/completions", map[string]any{
+		"model": "with-overflow", "messages": []map[string]any{{"role": "user", "content": "hi"}},
+	})
+	if rec.Code != 500 || secondary.mu.requests.Load() != 0 {
+		t.Fatalf("a provider outage must not spend market credit: status=%d secondary=%d", rec.Code, secondary.mu.requests.Load())
+	}
+}
+
 func TestFallbackExhausted(t *testing.T) {
 	a := newMockUpstream(500, `{"error":"a down"}`)
 	defer a.Close()
