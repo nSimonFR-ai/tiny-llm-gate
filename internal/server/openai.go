@@ -34,12 +34,12 @@ func (s *Server) handleEmbeddings(w http.ResponseWriter, r *http.Request) {
 
 // proxyOpenAI is the shared body of chat/completions and embeddings routes.
 // It:
-//   1. Reads the body (bounded by maxRequestBytes)
-//   2. Peeks the "model" and "stream" fields
-//   3. Resolves the model through aliases
-//   4. Iterates the model + its fallbacks, sending to each upstream until one
-//      succeeds. Fallbacks only fire when no bytes have been written to the
-//      client yet.
+//  1. Reads the body (bounded by maxRequestBytes)
+//  2. Peeks the "model" and "stream" fields
+//  3. Resolves the model through aliases
+//  4. Iterates the model + its fallbacks, sending to each upstream until one
+//     succeeds. Fallbacks only fire when no bytes have been written to the
+//     client yet.
 func (s *Server) proxyOpenAI(w http.ResponseWriter, r *http.Request, upstreamPath string) {
 	started := time.Now()
 	reqID := requestID(r.Context())
@@ -172,7 +172,7 @@ func (s *Server) sendUpstream(
 	// 500 by re-throwing in a catch-all handler. When the JSON body
 	// contains an OpenAI error with type "invalid_request_error", the
 	// error is non-retryable — pass it through instead of falling back.
-	if resp.StatusCode >= 500 && canRetry {
+	if shouldFallbackStatus(hop, resp.StatusCode, canRetry) {
 		if isWrappedClientError(resp) {
 			resp.StatusCode = http.StatusBadRequest
 		} else {
@@ -459,3 +459,20 @@ func (s *Server) handleModels(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(resp)
 }
 
+// shouldFallbackStatus keeps the historical 5xx policy unless a model opts
+// into an explicit list. An explicit list replaces the default, so [429]
+// means quota overflow only, not provider outage fallback.
+func shouldFallbackStatus(hop *resolve.Resolved, status int, canRetry bool) bool {
+	if !canRetry {
+		return false
+	}
+	if len(hop.FallbackOnStatus) == 0 {
+		return status >= 500
+	}
+	for _, configured := range hop.FallbackOnStatus {
+		if status == configured {
+			return true
+		}
+	}
+	return false
+}

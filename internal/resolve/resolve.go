@@ -31,6 +31,8 @@ type Resolved struct {
 	// The chain is a list of canonical model names; each must still be
 	// re-resolved to pick up its own provider/upstream_model.
 	Fallback []string
+	// FallbackOnStatus is copied from the model that owns this hop.
+	FallbackOnStatus []int
 	// DefaultEmbedDimensions, when set, is the default dimension to inject
 	// into embedding requests that don't specify one.
 	DefaultEmbedDimensions *int
@@ -70,6 +72,7 @@ func (r *Resolver) Resolve(name string) (*Resolved, error) {
 		ProviderName:           m.Provider,
 		Provider:               p,
 		Fallback:               m.Fallback,
+		FallbackOnStatus:       m.FallbackOnStatus,
 		DefaultEmbedDimensions: m.DefaultEmbedDimensions,
 		ReasoningEffort:        m.ReasoningEffort,
 	}, nil

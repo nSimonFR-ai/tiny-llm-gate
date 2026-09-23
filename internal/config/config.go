@@ -12,12 +12,12 @@ import (
 
 // Config is the root configuration.
 type Config struct {
-	Listen     string                `yaml:"listen"`
-	Providers  map[string]Provider   `yaml:"providers"`
-	Models     map[string]Model      `yaml:"models"`
-	Aliases    map[string]string     `yaml:"aliases"`
-	MCPBridges map[string]MCPBridge  `yaml:"mcp_bridges,omitempty"`
-	Anthropic  *Anthropic            `yaml:"anthropic,omitempty"`
+	Listen     string               `yaml:"listen"`
+	Providers  map[string]Provider  `yaml:"providers"`
+	Models     map[string]Model     `yaml:"models"`
+	Aliases    map[string]string    `yaml:"aliases"`
+	MCPBridges map[string]MCPBridge `yaml:"mcp_bridges,omitempty"`
+	Anthropic  *Anthropic           `yaml:"anthropic,omitempty"`
 }
 
 // Anthropic configures the pass-through proxy for Anthropic's /v1/messages
@@ -114,6 +114,9 @@ type Model struct {
 	Provider      string   `yaml:"provider"`
 	UpstreamModel string   `yaml:"upstream_model"`
 	Fallback      []string `yaml:"fallback,omitempty"`
+	// FallbackOnStatus replaces the default retry policy when non-empty.
+	// By default only 5xx can fall through; use [429] for quota-only overflow.
+	FallbackOnStatus []int `yaml:"fallback_on_status,omitempty"`
 	// DefaultEmbedDimensions, when set, is injected into embedding requests
 	// that arrive without an explicit dimension parameter (Gemini
 	// outputDimensionality / OpenAI dimensions). Prevents Matryoshka-capable
